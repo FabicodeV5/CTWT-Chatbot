@@ -236,7 +236,7 @@ export async function generateAgentReply(params: {
             reason: String(args.reason ?? 'customer_request'),
             customerSummary: String(args.customerSummary ?? params.userMessage),
           });
-        } else {
+         else {
           result = { error: `Unknown tool: ${toolCall.function.name}` };
         }
       } catch (toolErr: any) {
