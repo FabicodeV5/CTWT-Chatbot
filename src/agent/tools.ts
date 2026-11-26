@@ -1,4 +1,4 @@
-import { sendWhatsAppText, sendWhatsAppTemplate } from '../whatsapp/client.js';
+import { sendWhatsAppText, sendWhatsAppDirectUtility } from '../whatsapp/client.js';
 import { supabase } from '../db/supabase.js';
 import { env } from '../config/env.js';
 
@@ -168,20 +168,20 @@ export async function escalateToHuman(params: {
     .filter(Boolean);
 
   const customerPhone =
-    conv?.wa_user_id || conv?.phone_number || conv?.phone || conv?.wa_id || conv?.whatsapp_number || "unknown";
+    conv?.wa_user_id ||
+    conv?.phone_number ||
+    conv?.phone ||
+    conv?.wa_id ||
+    conv?.whatsapp_number ||
+    "unknown";
   const customerName =
     conv?.customer_name || conv?.profile_name || conv?.name || "Customer";
 
-  const templateName = process.env.STAFF_ALERT_TEMPLATE || "staff_support_alert";
-  const templateLang = process.env.STAFF_ALERT_TEMPLATE_LANG || "en_US";
-
   if (staffPhones.length > 0) {
-    const cleanCustomerPhone = String(customerPhone).replace(/[^0-9]/g, "") || "0";
-    const customerDisplay = `${customerName} (+${cleanCustomerPhone})`;
-
-    const fallbackText = [
+    const cleanCustomerPhone = String(customerPhone).replace(/[^0-9]/g, "");
+    const alertText = [
       "🚨 *CTW Tech — Human Support Needed*",
-      `*Customer:* ${customerDisplay}`,
+      `*Customer:* ${customerName} (+${cleanCustomerPhone})`,
       `*Reason:* ${params.reason}`,
       `*Summary:* ${params.customerSummary}`,
       `*Open chat:* https://wa.me/${cleanCustomerPhone}`,
@@ -189,22 +189,13 @@ export async function escalateToHuman(params: {
 
     for (const staffPhone of staffPhones) {
       try {
-        await sendWhatsAppTemplate({
-          to: staffPhone,
-          templateName,
-          languageCode: templateLang,
-          bodyVariables: [
-            customerDisplay,
-            params.reason,
-            params.customerSummary,
-            cleanCustomerPhone,
-          ],
-        });
-        console.log(`✅ [escalateToHuman] Template "${templateName}" sent to ${staffPhone}`);
-      } catch (tplErr) {
-        console.error(`⚠️ Template failed for ${staffPhone}, trying text fallback:`, tplErr);
+        await sendWhatsAppDirectUtility(staffPhone, alertText);
+        console.log(`✅ [escalateToHuman] Direct Send utility alert sent to ${staffPhone}`);
+      } catch (directErr) {
+        console.error(`⚠️ Direct Send failed for ${staffPhone}, trying standard text:`, directErr);
         try {
-          await sendWhatsAppText(staffPhone, fallbackText);
+          await sendWhatsAppText(staffPhone, alertText);
+          console.log(`✅ [escalateToHuman] Fallback text alert sent to ${staffPhone}`);
         } catch (notifyErr) {
           console.error(`⚠️ Failed to notify staff (${staffPhone}) via WhatsApp:`, notifyErr);
         }
@@ -219,6 +210,10 @@ export async function escalateToHuman(params: {
     notifiedStaff: staffPhones.length > 0,
     notifiedPhones: staffPhones,
     reason: params.reason,
+    summary: params.customerSummary,
+    storeDomain: env.SHOPIFY_STORE_DOMAIN,
+  };
+}
     summary: params.customerSummary,
     storeDomain: env.SHOPIFY_STORE_DOMAIN,
   };
