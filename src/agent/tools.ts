@@ -204,3 +204,13 @@ export async function escalateToHuman(params: {
   } else {
     console.warn("⚠️ STAFF_ALERT_PHONE is empty in .env");
   }
+
+  return {
+    escalated: true,
+    notifiedStaff: staffPhones.length > 0,
+    notifiedPhones: staffPhones,
+    reason: params.reason,
+    summary: params.customerSummary,
+    storeDomain: env.SHOPIFY_STORE_DOMAIN,
+  };
+}
