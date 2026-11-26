@@ -1,4 +1,4 @@
-import { sendWhatsAppText } from '../whatsapp/client.js';
+import { sendWhatsAppText, sendWhatsAppTemplate } from '../whatsapp/client.js';
 import { supabase } from '../db/supabase.js';
 import { env } from '../config/env.js';
 
@@ -172,11 +172,16 @@ export async function escalateToHuman(params: {
   const customerName =
     conv?.customer_name || conv?.profile_name || conv?.name || "Customer";
 
+  const templateName = process.env.STAFF_ALERT_TEMPLATE || "staff_support_alert";
+  const templateLang = process.env.STAFF_ALERT_TEMPLATE_LANG || "en_US";
+
   if (staffPhones.length > 0) {
-    const cleanCustomerPhone = String(customerPhone).replace(/[^0-9]/g, "");
-    const alertText = [
+    const cleanCustomerPhone = String(customerPhone).replace(/[^0-9]/g, "") || "0";
+    const customerDisplay = `${customerName} (+${cleanCustomerPhone})`;
+
+    const fallbackText = [
       "🚨 *CTW Tech — Human Support Needed*",
-      `*Customer:* ${customerName} (+${cleanCustomerPhone})`,
+      `*Customer:* ${customerDisplay}`,
       `*Reason:* ${params.reason}`,
       `*Summary:* ${params.customerSummary}`,
       `*Open chat:* https://wa.me/${cleanCustomerPhone}`,
@@ -184,9 +189,25 @@ export async function escalateToHuman(params: {
 
     for (const staffPhone of staffPhones) {
       try {
-        await sendWhatsAppText(staffPhone, alertText);
-      } catch (notifyErr) {
-        console.error(`⚠️ Failed to notify staff (${staffPhone}) via WhatsApp:`, notifyErr);
+        await sendWhatsAppTemplate({
+          to: staffPhone,
+          templateName,
+          languageCode: templateLang,
+          bodyVariables: [
+            customerDisplay,
+            params.reason,
+            params.customerSummary,
+            cleanCustomerPhone,
+          ],
+        });
+        console.log(`✅ [escalateToHuman] Template "${templateName}" sent to ${staffPhone}`);
+      } catch (tplErr) {
+        console.error(`⚠️ Template failed for ${staffPhone}, trying text fallback:`, tplErr);
+        try {
+          await sendWhatsAppText(staffPhone, fallbackText);
+        } catch (notifyErr) {
+          console.error(`⚠️ Failed to notify staff (${staffPhone}) via WhatsApp:`, notifyErr);
+        }
       }
     }
   } else {
