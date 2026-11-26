@@ -6,13 +6,17 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "sync": "tsx src/shopify/run-sync.ts",
+    "sync:public": "tsx src/shopify/run-public-sync.ts"
   },
   "dependencies": {
+    "@google/genai": "^3.6.1",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.2",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "openai": "^7.63.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
