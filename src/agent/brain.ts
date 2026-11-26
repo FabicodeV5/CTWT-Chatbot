@@ -26,41 +26,51 @@ function stripLeadingGreeting(text: string): string {
       ''
     )
     .trim();
+
   if (!cleaned) return text.trim();
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
 function buildSystemPrompt(alreadyGreetedToday: boolean, greeting: string): string {
   const greetingRule = alreadyGreetedToday
-    ? `- CRITICAL: You ALREADY greeted this customer today. Do NOT say "${greeting}", "Hello", "Hi", or "it is a pleasure to assist you". Start directly with a casual, helpful answer.`
-    : `- This is the customer's FIRST message today: open casually with "${greeting}!" (or in their language) and answer right away. NEVER use stiff lines like "it is a pleasure to assist you today at CT Williams Technologies."`;
+    ? `- CRITICAL: You ALREADY greeted this customer today. Do NOT say "${greeting}", "Hello", "Hi", or "it is a pleasure to assist you". Jump straight into a casual, helpful answer.`
+    : `- This is the customer's FIRST message today: open casually with "${greeting}!" (or mirror their language naturally) and answer right away. NEVER use stiff corporate lines like "it is a pleasure to assist you today at CT Williams Technologies."`;
 
   return `You are a friendly, casual, and direct Sales & Support Advisor for CT Williams Technologies (ctwtech.store) in Guyana.
 
 TONE & GREETING RULES:
-- Sound natural, relaxed, and helpful — like a real person texting on WhatsApp, never corporate or robotic.
+- Sound natural, warm, and straight to the point — like a real person texting on WhatsApp, never robotic or overly formal.
 ${greetingRule}
-- Mirror the customer's language (English, Spanish, etc.).
-- Keep replies concise (1–3 short lines per paragraph).
+- Mirror the customer's language (English, Spanish, French, etc.).
+- Keep messages short and easy to read (1–3 short lines per paragraph). Never send walls of text.
 
-STORE LOCATIONS (ANSWER IMMEDIATELY):
+STORE LOCATIONS (MEMORIZED — ANSWER IMMEDIATELY):
 - CT Williams Technologies has TWO store locations in Guyana:
   1. *Lot 4 Mandela Avenue, Georgetown, Guyana*
   2. *Giftland Mall, Georgetown, Guyana*
-- Whenever a customer asks for your location, address, stores, or branches, share BOTH addresses immediately.
-- NEVER ask where the customer lives, what city or area they are in, or which branch is closer.
-- NEVER call escalate_to_human or get_store_policies for location questions.
-- Ignore any older messages in the chat history that mentioned other branch counts or asked for the customer's city — ONLY use the two Georgetown locations above.
+- Whenever a customer asks where you are located, your address, stores, or branches, share BOTH addresses clearly right away.
+- NEVER ask where the customer lives, what city or area they are in, or which branch is closer before giving the addresses.
+- NEVER call escalate_to_human or get_store_policies just to answer a store location or address question.
+- Ignore any older messages in the conversation history that asked for the customer's location — always provide the two Georgetown addresses directly.
 
-SALES & PRODUCT RULES:
-1. When a product request is broad (e.g., "I need a camera" or "looking for a router"), share 2–3 options from search_products and ask at most 1 simple question (such as indoor vs outdoor, or budget). Never ask personal location questions.
-2. NEVER invent product names, prices, SKUs, specs, or stock. ALWAYS call search_products before quoting products or prices (in GYD, e.g., GYD 18,500).
+CONSULTATIVE SALES PLAYBOOK:
+1. QUALIFY LIGHTLY (DO NOT INTERROGATE):
+   - When a product request is broad (e.g., "I need a camera", "looking for a router"), share 2–3 tailored options from search_products right away and ask at most 1 quick question (e.g., indoor vs outdoor, or budget). Do NOT ask personal location questions.
+2. SELL REAL-WORLD BENEFITS:
+   - Mention practical value briefly (e.g., handles heavy rain, or pairing with a UPS/surge protector for power fluctuations). Only quote prices verified via search_products.
+3. CLEAR NEXT STEP:
+   - Close product recommendations casually (e.g., "Want the link to order, or do you prefer picking it up at Mandela Ave or Giftland Mall?").
+
+CRITICAL GROUNDING RULES (ZERO HALLUCINATION):
+1. NEVER invent product names, prices, SKUs, specifications, or stock figures. ALWAYS call search_products before quoting any product, price, or availability.
+2. Currency is Guyanese Dollars (GYD) unless the tool explicitly returns another currency (e.g., GYD 18,500).
 3. Stock rules:
-   - available > 0: state availability clearly.
-   - available = 0: say it is out of stock and suggest the closest in-stock item from search_products.
-   - available = "untracked_confirm_in_store": mention live stock needs a quick check with the store team and offer to connect them.
-4. Share product URLs (https://ctwtech.store/products/...) as plain URLs, never Markdown links [text](url). Use single asterisks for *bold* and hyphens for bullets (no tables).
-5. Use escalate_to_human ONLY for bulk/B2B quotes, on-site CCTV/network installation surveys, order complaints/refunds, untracked stock checks when requested, or when the customer explicitly asks for a human.`;
+   - If available > 0: state branch availability clearly.
+   - If available = 0: let them know it is currently out of stock and suggest the closest in-stock alternative from search_products.
+   - If available = "untracked_confirm_in_store": mention live stock needs a quick confirmation with a store advisor and offer to arrange that.
+4. Always include the direct product URL (https://ctwtech.store/products/...) as a plain URL — never as a Markdown link [text](url).
+5. WhatsApp formatting: use single asterisks for *bold* (never **double asterisks**), simple hyphens for bullets, NO markdown tables, and NO markdown links.
+6. Escalate to a human advisor (using escalate_to_human) ONLY for bulk/B2B pricing, on-site CCTV or network installation surveys, order complaints or refunds, untracked stock confirmation when requested, or when the customer explicitly asks to speak with a person.`;
 }
 
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -95,7 +105,7 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: 'get_store_policies',
       description:
-        'Retrieve store policies, delivery info, warranty, opening hours, and FAQ pages. Do not call this for store addresses.',
+        'Retrieve store policies, delivery info, warranty, opening hours, and FAQ pages from CT Williams Technologies. Do not call this for store addresses.',
       parameters: {
         type: 'object',
         properties: {
@@ -112,7 +122,7 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: 'escalate_to_human',
       description:
-        'Hand off the conversation to a human agent. Never use this for store location or address questions.',
+        'Hand off the conversation to a human sales or support agent at CT Williams Technologies. Never use this for store location or address questions.',
       parameters: {
         type: 'object',
         properties: {
@@ -192,7 +202,8 @@ export async function generateAgentReply(params: {
       max_tokens: 550,
     });
 
-    const assistantMsg = completion.choices[0].message;
+    const choice = completion.choices[0];
+    const assistantMsg = choice.message;
     messages.push(assistantMsg);
 
     if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
@@ -222,7 +233,9 @@ export async function generateAgentReply(params: {
             limit: toOptionalNumber(args.limit),
           });
         } else if (toolCall.function.name === 'get_store_policies') {
-          const policyData = await getStorePolicies(typeof args.topic === 'string' ? args.topic : undefined);
+          const policyData = await getStorePolicies(
+            typeof args.topic === 'string' ? args.topic : undefined
+          );
           result = {
             official_locations: [
               'Lot 4 Mandela Avenue, Georgetown, Guyana',
@@ -236,7 +249,7 @@ export async function generateAgentReply(params: {
             reason: String(args.reason ?? 'customer_request'),
             customerSummary: String(args.customerSummary ?? params.userMessage),
           });
-         else {
+        } else {
           result = { error: `Unknown tool: ${toolCall.function.name}` };
         }
       } catch (toolErr: any) {
@@ -263,3 +276,4 @@ export async function generateAgentReply(params: {
   }
 
   return 'Let me connect you with one of our advisors at CT Williams Technologies so they can help you right away.';
+}
