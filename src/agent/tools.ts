@@ -215,6 +215,6 @@ export async function escalateToHuman(params: {
   };
 }
     summary: params.customerSummary,
-    storeDomain: env.SHOPIFY_STORE_DOMAIN,
-  };
+    storeDomain: env.SHOPIFY_STORE_DOMAIN;
+  }
 }
