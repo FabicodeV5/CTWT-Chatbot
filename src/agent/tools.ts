@@ -117,8 +117,11 @@ export async function getStorePolicies(topic?: string) {
   let query = supabase.from('store_pages').select('handle, title, body');
 
   if (topic && topic.trim()) {
-    const pattern = `%${topic.trim()}%`;
-    query = query.or(`title.ilike.${pattern},handle.ilike.${pattern},body.ilike.${pattern}`);
+    const safeTopic = topic.replace(/[,()*]/g, '').trim();
+    if (safeTopic) {
+      const pattern = `%${safeTopic}%`;
+      query = query.or(`title.ilike.${pattern},handle.ilike.${pattern},body.ilike.${pattern}`);
+    }
   }
 
   const { data, error } = await query.limit(5);
@@ -146,6 +149,30 @@ export async function escalateToHuman(params: {
   customerSummary: string;
 }) {
   console.log("🔔 [escalateToHuman] Triggered for:", params.conversationId);
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from("conversations")
+    .select("mode")
+    .eq("id", params.conversationId)
+    .single();
+
+  if (fetchErr) {
+    console.error("❌ [escalateToHuman] Supabase read error:", fetchErr.message);
+    return { escalated: false, error: fetchErr.message };
+  }
+
+  if (existing?.mode === "human") {
+    console.log("ℹ️ [escalateToHuman] Already in human mode, skipping duplicate staff alert.");
+    return {
+      escalated: true,
+      alreadyEscalated: true,
+      notifiedStaff: false,
+      notifiedPhones: [],
+      reason: params.reason,
+      summary: params.customerSummary,
+      storeDomain: env.SHOPIFY_STORE_DOMAIN,
+    };
+  }
 
   const { data: conv, error } = await supabase
     .from("conversations")
