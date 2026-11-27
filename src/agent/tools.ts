@@ -143,6 +143,9 @@ export async function getStorePolicies(topic?: string) {
   };
 }
 
+const ESCALATION_COOLDOWN_MS = 10 * 60 * 1000;
+const recentEscalations = new Map<string, number>();
+
 export async function escalateToHuman(params: {
   conversationId: string;
   reason: string;
@@ -150,19 +153,9 @@ export async function escalateToHuman(params: {
 }) {
   console.log("🔔 [escalateToHuman] Triggered for:", params.conversationId);
 
-  const { data: existing, error: fetchErr } = await supabase
-    .from("conversations")
-    .select("mode")
-    .eq("id", params.conversationId)
-    .single();
-
-  if (fetchErr) {
-    console.error("❌ [escalateToHuman] Supabase read error:", fetchErr.message);
-    return { escalated: false, error: fetchErr.message };
-  }
-
-  if (existing?.mode === "human") {
-    console.log("ℹ️ [escalateToHuman] Already in human mode, skipping duplicate staff alert.");
+  const lastAlert = recentEscalations.get(params.conversationId) ?? 0;
+  if (Date.now() - lastAlert < ESCALATION_COOLDOWN_MS) {
+    console.log("ℹ️ [escalateToHuman] Cooldown active, skipping duplicate staff alert.");
     return {
       escalated: true,
       alreadyEscalated: true,
@@ -173,11 +166,12 @@ export async function escalateToHuman(params: {
       storeDomain: env.SHOPIFY_STORE_DOMAIN,
     };
   }
+  recentEscalations.set(params.conversationId, Date.now());
 
   const { data: conv, error } = await supabase
     .from("conversations")
     .update({
-      mode: "human",
+      mode: "bot",
       last_message_at: new Date().toISOString(),
     })
     .eq("id", params.conversationId)
