@@ -2,21 +2,24 @@ import OpenAI from 'openai';
 import { env } from '../config/env.js';
 import { searchProducts, getStorePolicies, escalateToHuman } from './tools.js';
 
-const lastGreetedDay = new Map<string, string>();
+function toGuyanaDateKey(timestampMs: number): string {
+  const guyanaDate = new Date(timestampMs - 4 * 60 * 60 * 1000);
+  const yyyy = guyanaDate.getUTCFullYear();
+  const mm = String(guyanaDate.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(guyanaDate.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 function getGuyanaTimeInfo(): { dateKey: string; greeting: string } {
-  // Guyana is UTC-4 year-round (no DST)
-  const guyanaDate = new Date(Date.now() - 4 * 60 * 60 * 1000);
-  const yyyy = guyanaDate.getUTCFullYear();
-  const mm = String(guyanaDate.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(guyanaDate.getUTCDate()).padStart(2, '0');
+  const nowMs = Date.now();
+  const guyanaDate = new Date(nowMs - 4 * 60 * 60 * 1000);
   const hour = guyanaDate.getUTCHours();
 
-  let greeting = 'Good evening';
-  if (hour >= 5 && hour < 12) greeting = 'Good morning';
-  else if (hour >= 12 && hour < 18) greeting = 'Good afternoon';
+  let greeting = "Good evening";
+  if (hour >= 5 && hour < 12) greeting = "Good morning";
+  else if (hour >= 12 && hour < 18) greeting = "Good afternoon";
 
-  return { dateKey: `${yyyy}-${mm}-${dd}`, greeting };
+  return { dateKey: toGuyanaDateKey(nowMs), greeting };
 }
 
 function stripLeadingGreeting(text: string): string {
@@ -161,7 +164,7 @@ function toOptionalNumber(value: unknown): number | undefined {
 
 export async function generateAgentReply(params: {
   conversationId: string;
-  history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  history: Array<{ role: 'user' | 'assistant'; content: string; createdAt?: string }>;
   userMessage: string;
 }): Promise<string> {
   if (!env.GROQ_API_KEY) {
@@ -170,13 +173,17 @@ export async function generateAgentReply(params: {
 
   const openai = getGroqClient();
   const { dateKey, greeting } = getGuyanaTimeInfo();
-  const recordedDate = lastGreetedDay.get(params.conversationId);
-  const hasAssistantHistory = params.history.some((m) => m.role === 'assistant');
+  const lastAssistantMsg = [...params.history]
+    .reverse()
+    .find((m) => m.role === "assistant" && m.createdAt);
 
-  const alreadyGreetedToday =
-    recordedDate === dateKey || (!recordedDate && hasAssistantHistory);
-
-  lastGreetedDay.set(params.conversationId, dateKey);
+  let alreadyGreetedToday = false;
+  if (lastAssistantMsg?.createdAt) {
+    const ts = new Date(lastAssistantMsg.createdAt).getTime();
+    if (Number.isFinite(ts)) {
+      alreadyGreetedToday = toGuyanaDateKey(ts) === dateKey;
+    }
+  }
 
   const sanitizedHistory: Array<{ role: 'user' | 'assistant'; content: string }> =
     params.history.map((msg) => ({
