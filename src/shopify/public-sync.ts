@@ -533,13 +533,52 @@ export async function runPublicStoreSync(): Promise<PublicSyncSummary> {
     }
 
     if (variantRows.length > 0) {
+      const incomingShopifyIds = variantRows
+        .map((v) => String(v.shopify_id ?? ""))
+        .filter(Boolean);
+
+      const existingVariantMeta = new Map<
+        string,
+        { barcode: string | null; inventory_item_id: string | null; inventory_tracked: boolean }
+      >();
+
+      if (incomingShopifyIds.length > 0) {
+        const { data: existingVars, error: fetchVarErr } = await supabase
+          .from('product_variants')
+          .select('shopify_id, barcode, inventory_item_id, inventory_tracked')
+          .in('shopify_id', incomingShopifyIds);
+
+        if (fetchVarErr) {
+          throw new Error(`Existing variant lookup failed (offset ${i}): ${fetchVarErr.message}`);
+        }
+
+        for (const row of existingVars ?? []) {
+          existingVariantMeta.set(String(row.shopify_id), {
+            barcode: row.barcode ?? null,
+            inventory_item_id: row.inventory_item_id ?? null,
+            inventory_tracked: Boolean(row.inventory_tracked),
+          });
+        }
+      }
+
+      const mergedVariantRows = variantRows.map((v) => {
+        const prev = existingVariantMeta.get(String(v.shopify_id));
+        if (!prev) return v;
+        return {
+          ...v,
+          barcode: v.barcode ?? prev.barcode,
+          inventory_item_id: v.inventory_item_id ?? prev.inventory_item_id,
+          inventory_tracked: Boolean(v.inventory_tracked) || prev.inventory_tracked,
+        };
+      });
+
       const { error: varErr } = await supabase
         .from('product_variants')
-        .upsert(variantRows, { onConflict: 'shopify_id' });
+        .upsert(mergedVariantRows, { onConflict: 'shopify_id' });
       if (varErr) {
         throw new Error(`Variant batch upsert failed (offset ${i}): ${varErr.message}`);
       }
-      variantCount += variantRows.length;
+      variantCount += mergedVariantRows.length;
     }
 
     if (issueRows.length > 0) {
