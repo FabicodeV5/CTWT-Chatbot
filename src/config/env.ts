@@ -18,6 +18,7 @@ const envSchema = z.object({
   GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
 
   WHATSAPP_VERIFY_TOKEN: z.string().min(16, 'WHATSAPP_VERIFY_TOKEN must be at least 16 characters'),
+  WHATSAPP_APP_SECRET: z.string().min(16).optional(),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_API_VERSION: z.string().default('v21.0'),
