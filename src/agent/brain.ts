@@ -42,6 +42,7 @@ function buildSystemPrompt(alreadyGreetedToday: boolean, greeting: string): stri
   return `You are a friendly, casual, and direct Sales & Support Advisor for CT Williams Technologies (ctwtech.store) in Guyana.
 
 TONE & GREETING RULES:
+- For simple greetings or small talk (e.g. "hi", "hello", "hola", "good morning"), NEVER call escalate_to_human or search_products. Reply warmly in 1-2 short lines and ask how you can help (products, prices/stock, or store locations).
 - Sound natural, warm, and straight to the point — like a real person texting on WhatsApp, never robotic or overly formal.
 ${greetingRule}
 - Mirror the customer's language (English, Spanish, French, etc.).
@@ -251,11 +252,21 @@ export async function generateAgentReply(params: {
             ...policyData,
           };
         } else if (toolCall.function.name === 'escalate_to_human') {
-          result = await escalateToHuman({
-            conversationId: params.conversationId,
-            reason: String(args.reason ?? 'customer_request'),
-            customerSummary: String(args.customerSummary ?? params.userMessage),
-          });
+          const isPureGreeting = /^(hi|hello|hey|hola|buenos\s+d[ií]as|buenas\s+(tardes|noches)|good\s+(morning|afternoon|evening))[!.?\s]*$/i.test(
+            params.userMessage.trim()
+          );
+          if (isPureGreeting) {
+            result = {
+              escalated: false,
+              skippedReason: "Simple greeting does not require human escalation",
+            };
+          } else {
+            result = await escalateToHuman({
+              conversationId: params.conversationId,
+              reason: String(args.reason ?? 'customer_request'),
+              customerSummary: String(args.customerSummary ?? params.userMessage),
+            });
+          }
         } else {
           result = { error: `Unknown tool: ${toolCall.function.name}` };
         }
