@@ -6,7 +6,13 @@ import { whatsappRouter } from './whatsapp/webhook.js';
 import { crmRouter } from './crm/routes.js';
 
 const app = express();
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = buf;
+    },
+  })
+);
 
 function requireCrmAuth(req: Request, res: Response, next: NextFunction) {
   const auth = req.headers.authorization || '';
