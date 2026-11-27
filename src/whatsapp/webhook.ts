@@ -1,5 +1,6 @@
+import crypto from 'crypto';
 import { supabase } from '../db/supabase.js';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { env } from '../config/env.js';
 import {
   getOrCreateConversation,
@@ -12,6 +13,57 @@ import { sendWhatsAppText } from './client.js';
 import { syncCustomerOnMessage } from '../crm/customers.js';
 
 export const whatsappRouter = Router();
+
+let warnedMissingAppSecret = false;
+
+function verifyMetaSignature(req: Request, res: Response, next: NextFunction) {
+  if (!env.WHATSAPP_APP_SECRET) {
+    if (!warnedMissingAppSecret) {
+      warnedMissingAppSecret = true;
+      console.warn('⚠️ WHATSAPP_APP_SECRET is not set — skipping X-Hub-Signature-256 verification.');
+    }
+    next();
+    return;
+  }
+
+  const signature = req.headers['x-hub-signature-256'];
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+
+  if (typeof signature !== 'string' || !rawBody) {
+    res.status(401).json({ error: 'Missing webhook signature' });
+    return;
+  }
+
+  const expected =
+    'sha256=' +
+    crypto.createHmac('sha256', env.WHATSAPP_APP_SECRET).update(rawBody).digest('hex');
+
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    console.warn('⚠️ Invalid X-Hub-Signature-256 on WhatsApp webhook');
+    res.status(401).json({ error: 'Invalid webhook signature' });
+    return;
+  }
+
+  next();
+}
+
+function requireAdminAuth(req: Request, res: Response, next: NextFunction) {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+
+  const a = Buffer.from(token);
+  const b = Buffer.from(env.CRM_API_KEY);
+
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  next();
+}
 
 // Verificación del webhook de Meta (GET)
 whatsappRouter.get('/', (req: Request, res: Response) => {
@@ -29,7 +81,7 @@ whatsappRouter.get('/', (req: Request, res: Response) => {
 });
 
 // Recepción de mensajes entrantes de Meta (POST)
-whatsappRouter.post('/', async (req: Request, res: Response) => {
+whatsappRouter.post('/', verifyMetaSignature, async (req: Request, res: Response) => {
   // Responder 200 de inmediato para evitar reintentos de Meta
   res.sendStatus(200);
 
@@ -138,7 +190,7 @@ whatsappRouter.post('/', async (req: Request, res: Response) => {
 });
 
 // Endpoint de simulación local (POST /webhook/whatsapp/simulate)
-whatsappRouter.post('/simulate', async (req: Request, res: Response) => {
+whatsappRouter.post('/simulate', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const phone = String(req.body?.phone || '5920000000');
     const text = String(req.body?.message || '').trim();
@@ -201,14 +253,14 @@ whatsappRouter.post('/simulate', async (req: Request, res: Response) => {
       status: conversation.status,
       reply,
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    console.error('❌ [/simulate] Error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-
 // Reactivar el bot en una conversación en modo humano (POST /webhook/whatsapp/resume-bot)
-whatsappRouter.post('/resume-bot', async (req: Request, res: Response) => {
+whatsappRouter.post('/resume-bot', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const phone = req.body?.phone ? String(req.body.phone).replace(/[^0-9]/g, "") : "";
     const conversationId = req.body?.conversationId ? String(req.body.conversationId).trim() : "";
@@ -234,7 +286,8 @@ whatsappRouter.post('/resume-bot', async (req: Request, res: Response) => {
     const { data, error } = await query.select("id, wa_user_id, mode");
 
     if (error) {
-      res.status(500).json({ error: error.message });
+      console.error('❌ [/resume-bot] Supabase error:', error.message);
+      res.status(500).json({ error: 'Internal server error' });
       return;
     }
 
@@ -245,7 +298,8 @@ whatsappRouter.post('/resume-bot', async (req: Request, res: Response) => {
 
     console.log("🤖 [resume-bot] Reactivated bot for:", data);
     res.json({ resumed: true, conversations: data });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    console.error('❌ [/resume-bot] Error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
