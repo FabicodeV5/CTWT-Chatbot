@@ -74,7 +74,9 @@ CRITICAL GROUNDING RULES (ZERO HALLUCINATION):
    - If available = "untracked_confirm_in_store": mention live stock needs a quick confirmation with a store advisor and offer to arrange that.
 4. Always include the direct product URL (https://ctwtech.store/products/...) as a plain URL — never as a Markdown link [text](url).
 5. WhatsApp formatting: use single asterisks for *bold* (never **double asterisks**), simple hyphens for bullets, NO markdown tables, and NO markdown links.
-6. Escalate to a human advisor (using escalate_to_human) ONLY for bulk/B2B pricing, on-site CCTV or network installation surveys, order complaints or refunds, untracked stock confirmation when requested, or when the customer explicitly asks to speak with a person.`;
+6. Escalate to a human advisor (using escalate_to_human) ONLY when ALL of the following are true:
+  - The need falls into one of these exact cases: bulk/B2B pricing, on-site CCTV or network installation surveys, order complaints or refunds, live confirmation of untracked stock when requested, or the customer explicitly asks for a human/advisor.
+  - Do NOT escalate on greetings, thanks, short replies ("ok", "yes", "thanks"), store addresses, product searches, or general policy/hours/warranty questions. If a request is unclear, ask 1 short clarifying question instead of escalating.`;
 }
 
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -126,7 +128,7 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: 'escalate_to_human',
       description:
-        'Hand off the conversation to a human sales or support agent at CT Williams Technologies. Never use this for store location or address questions.',
+        'Hand off to a human sales or support agent ONLY for B2B/bulk quotes, on-site installation surveys, complaints/refunds, requested untracked stock checks, or explicit requests for a person. Never use for greetings, thanks, store addresses, or catalog/policy lookups.',
       parameters: {
         type: 'object',
         properties: {
@@ -283,14 +285,20 @@ export async function generateAgentReply(params: {
     }
   }
 
-  try {
-    await escalateToHuman({
-      conversationId: params.conversationId,
-      reason: 'agent_step_limit',
-      customerSummary: `Agent reached max tool steps while handling: "${params.userMessage}"`,
-    });
-  } catch (err) {
-    console.error('⚠️ Fallback escalation failed:', err);
+  const shouldFallbackEscalate = /\b(quote|bulk|wholesale|b2b|install|site\s*visit|complaint|refund|warranty\s*claim|human|agent|person|representative|advisor|cotizaci[oó]n|mayor|instalaci[oó]n|reclamo|reembolso|asesor|humano)\b/i.test(
+    params.userMessage
+  );
+
+  if (shouldFallbackEscalate) {
+    try {
+      await escalateToHuman({
+        conversationId: params.conversationId,
+        reason: 'agent_step_limit',
+        customerSummary: `Agent reached max tool steps while handling: "${params.userMessage}"`,
+      });
+    } catch (err) {
+      console.error('⚠️ Fallback escalation failed:', err);
+    }
   }
 
   return 'Let me connect you with one of our advisors at CT Williams Technologies so they can help you right away.';
