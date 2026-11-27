@@ -5,6 +5,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   SUPABASE_URL: z.string().url('SUPABASE_URL must be a valid URL'),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
+  CRM_API_KEY: z.string().min(24, 'CRM_API_KEY must be at least 24 characters'),
 
   SHOPIFY_STORE_DOMAIN: z.string().min(1, 'SHOPIFY_STORE_DOMAIN is required'),
   SHOPIFY_API_VERSION: z.string().default('2026-01'),
@@ -16,7 +17,7 @@ const envSchema = z.object({
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
 
-  WHATSAPP_VERIFY_TOKEN: z.string().default('ctw_verify_token_2026'),
+  WHATSAPP_VERIFY_TOKEN: z.string().min(16, 'WHATSAPP_VERIFY_TOKEN must be at least 16 characters'),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_API_VERSION: z.string().default('v21.0'),
