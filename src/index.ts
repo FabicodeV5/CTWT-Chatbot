@@ -1,11 +1,29 @@
 import crypto from 'crypto';
 import express, { type NextFunction, type Request, type Response } from 'express';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { env } from './config/env.js';
 import { supabase } from './db/supabase.js';
 import { whatsappRouter } from './whatsapp/webhook.js';
 import { crmRouter } from './crm/routes.js';
 
 const app = express();
+app.set('trust proxy', 1);
+app.use(helmet());
+
+const webhookLimiter = rateLimit({
+windowMs: 60 * 1000,
+max: 120,
+standardHeaders: true,
+legacyHeaders: false,
+});
+
+const crmLimiter = rateLimit({
+windowMs: 15 * 60 * 1000,
+max: 120,
+standardHeaders: true,
+legacyHeaders: false,
+});
 app.use(
   express.json({
     verify: (req, _res, buf) => {
@@ -47,8 +65,8 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-app.use('/webhook/whatsapp', whatsappRouter);
-app.use('/crm', requireCrmAuth, crmRouter);
+app.use('/webhook/whatsapp', webhookLimiter, whatsappRouter);
+app.use('/crm', crmLimiter, requireCrmAuth, crmRouter);
 
 app.listen(env.PORT, () => {
   console.log(`🚀 CTW WhatsApp Bot listening on http://localhost:${env.PORT}`);
