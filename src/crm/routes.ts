@@ -39,8 +39,9 @@ crmRouter.get('/customers', async (req: Request, res: Response) => {
     const limit = Number(req.query.limit ?? 50);
     const customers = await listCustomersOverview(Number.isFinite(limit) ? limit : 50);
     res.json({ count: customers.length, customers });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    console.error("❌ [GET /crm/customers] Error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -53,8 +54,9 @@ crmRouter.get('/customers/:phone', async (req: Request, res: Response) => {
       return;
     }
     res.json(profile);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    console.error("❌ [GET /crm/customers/:phone] Error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -95,7 +97,8 @@ crmRouter.post('/sales', async (req: Request, res: Response) => {
     });
 
     res.status(201).json({ recorded: true, sale });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {
+    console.error("❌ [POST /crm/sales] Error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
