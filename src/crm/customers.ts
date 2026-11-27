@@ -62,7 +62,15 @@ export async function ensureCustomer(params: {
       updates.last_handled_by = params.handledBy;
     }
 
-    await supabase.from('customers').update(updates).eq('id', existing.id);
+    const { error: updateErr } = await supabase
+      .from('customers')
+      .update(updates)
+      .eq('id', existing.id);
+
+    if (updateErr) {
+      console.warn('⚠️ [CRM] Failed to update customer metadata:', updateErr.message);
+    }
+
     return { id: existing.id, wa_user_id: existing.wa_user_id };
   }
 
@@ -135,7 +143,14 @@ export async function syncCustomerOnMessage(params: {
       updates.last_handled_by = handledBy;
     }
 
-    await supabase.from('customers').update(updates).eq('id', customer.id);
+    const { error: syncErr } = await supabase
+      .from('customers')
+      .update(updates)
+      .eq('id', customer.id);
+
+    if (syncErr) {
+      console.warn('⚠️ [CRM] Failed to sync customer message count:', syncErr.message);
+    }
   } catch (err) {
     console.warn('⚠️ [CRM] Non-blocking customer sync error:', err);
   }
@@ -300,12 +315,21 @@ export async function listCustomersOverview(limit = 50) {
 }
 
 export async function getCustomerProfile(phoneOrWaId: string) {
-  const cleanPhone = normalizePhone(phoneOrWaId) || phoneOrWaId.trim();
+  const safeId = phoneOrWaId.replace(/[^0-9+a-zA-Z_-]/g, '').trim();
+  const cleanPhone = normalizePhone(phoneOrWaId);
+
+  if (!safeId && !cleanPhone) {
+    return null;
+  }
+
+  const orFilters: string[] = [];
+  if (safeId) orFilters.push(`wa_user_id.eq.${safeId}`);
+  if (cleanPhone) orFilters.push(`phone_number.eq.${cleanPhone}`);
 
   const { data: customer, error: custErr } = await supabase
     .from('customers')
     .select('*')
-    .or(`wa_user_id.eq.${phoneOrWaId.trim()},phone_number.eq.${cleanPhone}`)
+    .or(orFilters.join(','))
     .maybeSingle();
 
   if (custErr) {
